@@ -2,8 +2,11 @@ import json
 
 import scrapy
 from scrapy.crawler import CrawlerProcess
-from scrapy.utils.project import get_project_settings
-from scrapy.utils.request import request_from_dict
+# from scrapy.utils.project import get_project_settings
+# from scrapy.utils.request import request_from_dict
+
+
+authors = []
 
 
 class FindUrlsForAuthors(scrapy.Spider):
@@ -14,10 +17,11 @@ class FindUrlsForAuthors(scrapy.Spider):
     find_all_links_for_authors = False
     custom_settings = {
         "FEED_FORMAT": "json", 
-        "FEED_URI": "list_authors.json"
+        "FEED_URI": "quotes.json"
     }
     
     def parse(self, response):
+        global authors
         
         # count = 0
         
@@ -25,19 +29,29 @@ class FindUrlsForAuthors(scrapy.Spider):
         
         if not self.find_all_links_for_authors:
             
+            for quote in response.xpath("/html//div[@class='quote']"):
+                yield {
+                    "tags": quote.xpath("div[@class='tags']/a/text()").extract(),
+                    "author": quote.xpath("span/small[@class='author']/text()").get(),
+                    "quote": quote.xpath("span[@class='text']/text()").get().strip()
+                }
+            
+            
             links = response.xpath("//div[@class='quote']/span/a/@href").extract()
             
             [self.links_for_authors.add(self.start_urls[0]+link) for link in links]
             
-            # for link in links:
-            #     self.new_start_urls.add(self.start_urls[0]+link)
-        
             next_page = response.xpath("//li[@class='next']/a/@href").get()
         
         if next_page:
             yield scrapy.Request(url=self.start_urls[0]+next_page)
             
         else:
+            
+            # self.custom_settings = {
+            #     "FEED_FORMAT": "json", 
+            #     "FEED_URI": "list_authors1.json"
+            # }
             
             self.find_all_links_for_authors = True
             
@@ -47,17 +61,20 @@ class FindUrlsForAuthors(scrapy.Spider):
             author = response.xpath("//h3[@class='author-title']/text()").get()
             
             if author:
-                yield {
+                authors.append({
                     "fullname": author.strip(),
                     "born_date": response.xpath("//span[@class='author-born-date']/text()").get(),
                     "born_location": response.xpath("//span[@class='author-born-location']/text()").get(),
                     "description": response.xpath("//div[@class='author-description']/text()").get().strip()
-                }
+                })
 
 
-process = CrawlerProcess(settings=get_project_settings())
+process = CrawlerProcess()
 process.crawl(FindUrlsForAuthors)
 process.start()
+
+with open("authors.json", "w") as file:
+    json.dump(authors, file)
 
 # import list_authors
 # with open("list_authors.json", "r") as file:
